@@ -25,8 +25,9 @@ from google.appengine.ext import webapp
 from google.appengine.api import urlfetch
 from google.appengine.ext.webapp import template
 
+# These only work if your IP is allowed
 ENOM_UID = 'fihn'
-ENOM_PASS = '3g3r235N'
+ENOM_PASS = ''
 
 def parse_response(body):
     return dict([kvp.split('=') for kvp in body.split('\r\n') if len(kvp) and not kvp[0] == ';'])
