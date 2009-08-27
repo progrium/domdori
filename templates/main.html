@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<form action="/register">
+  <input name="domain" type="text" id="domain" /> <input id="register" type="submit" disabled="disabled" value="Register">
+</form>
+<div id="available"></div>
+<script type="text/javascript">
+var connection = null;
+var last = null;
+$('#domain').keyup(function () {
+  if ($('#domain').val().match(/[\w\d-]+\.[\w\d-]{2,4}$/)) { 
+    $('#register').removeAttr('disabled');
+  } else {
+    $('#register').attr('disabled', 'disabled');
+  } 
+  setTimeout(function() {
+    if (last != $('#domain').val()) {
+      last = $('#domain').val();
+      if (connection) { connection.abort(); }
+      connection = $.ajax({
+        type:"GET", 
+        url: "/check?domain=" + $('#domain').val(), 
+        success: function(data){
+          $("#available").html(data);
+        }
+      });
+    }
+  }, 100);
+  
+});
+</script>
+{% endblock %}
