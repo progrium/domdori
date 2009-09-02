@@ -22,6 +22,7 @@ import wsgiref.handlers
 
 
 from google.appengine.ext import webapp
+from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.ext.webapp import template
 
@@ -38,6 +39,11 @@ class RegisterHandler(webapp.RequestHandler):
 
 class MainHandler(webapp.RequestHandler):
     def get(self):
+        user = users.get_current_user()
+        if user:
+            logout_url = users.create_logout_url("/")
+        else:
+            login_url = users.create_login_url('/')
         self.response.out.write(template.render('templates/main.html', locals()))
 
 class CheckHandler(webapp.RequestHandler):

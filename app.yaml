@@ -4,5 +4,7 @@ runtime: python
 api_version: 1
 
 handlers:
+- url: /dns.*
+  script: dns.py
 - url: .*
   script: main.py

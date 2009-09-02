@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<ul>
+  {% for zone in zones %}
+  <li><a href="/dns/{{ zone.domain }}">{{ zone.domain }}</a></li>
+  {% endfor %}
+</ul>
+<form action="/dns" method="post">
+  Domain: <input type="text" name="domain" /> <input type="submit" value="Create Zone" />
+</form>
+{% endblock %}

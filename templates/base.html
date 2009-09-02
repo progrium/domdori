@@ -11,7 +11,11 @@
       </div>
       <div id="content">
         <div style="float: right;">
-
+          {% if user %}
+          {{ user.nickname }} | <a href="/dns">Manage DNS</a> | <a href="{{ logout_url }}">Logout</a>
+          {% else %}
+          Not logged in. <a href="{{ login_url }}">Login?</a>
+          {% endif %}
         </div>
         <br />
         {% block content %}{% endblock %}

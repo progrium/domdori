@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>{{ zone.domain }}</h3>
+<ul>
+  {% for record in records %}
+  <li>{{ record }} <a href="/dns/{{ zone.domain }}?delete={{ record.key.id }}" style="font-size: smaller; ">Delete</a></li>
+  {% endfor %}
+</ul>
+<form action="/dns/{{ zone.domain }}" method="post">
+  <table>
+    <tr><td>Name:<br /><input type="text" name="name" /></td>
+      <td>Type:<br /><input type="text" name="type" /></td>
+      <td>Data:<br /><input type="text" name="data" /></td>
+      <td>TTL: <small>(optional)</small><br /><input type="text" name="ttl" /></td>
+      <td>&nbsp;<br /><input type="submit" value="Create Record" /></td>
+    </tr>
+  </table>
+</form>
+{% endblock %}
