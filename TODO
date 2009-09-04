@@ -1,0 +1,33 @@
+-deploy eventdns
+-deploy real dns 
+-point real dns to eventdns
+-potentially shave yack (remaining functional blockers)
+-ALPHA
+-figure out zone transfer
+-find bugs
+-put more domains on it
+-write tests for app
+-
+notify.io ns1.domdori.com
+SRV
+
+PUBLIC RELEASE
+- look nice
+- registration / payment
+- working dns
+
+-find dns frontend providers (everydns, dnsmadeeasy, dyndns) or deploy to other servers
+
+
+
+ideas:
+-integrate mailhooks
+-auto lookup of IP service as you enter IP
+-type aware record entry w/ validation etc
+-prepopulate domain contact info from amazon billing info
+-suggest services
+-builtin support for google apps
+-default holding page
+-default dns settings
+-integrate github -> app engine for static hosting
+-"oauth"-lke third party integration for custom domains
