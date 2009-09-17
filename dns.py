@@ -118,12 +118,15 @@ class ApiHandler(webapp.RequestHandler):
         records = ResourceRecord.get_all_by_name(domain)
         type = self.request.GET.get('type', None)
         if type and not type == 'ANY':
-            if type == 'SOA' and domain == records[0].zone.domain:
-                records = [records[0].zone.soa_record()]
-            elif type == 'SOA':
-                records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
+            if type == 'SOA':
+                if domain == records[0].zone.domain:
+                    records = [records[0].zone.soa_record()]
+                else:
+                    records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
             else:
                 records = records.filter('type =', type)
+                if type == 'A' and records.count() == 0:
+                    records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME')
         self.response.out.write(simplejson.dumps(records, cls=BetterJSONEncoder))
 
 class RecordsHandler(webapp.RequestHandler):
