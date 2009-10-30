@@ -36,7 +36,7 @@ class Zone(db.Model):
                     86400,  # expire
                     3600,   # minimum
                 ]))),
-            'ttl': 0,
+            'ttl': 3600,
             'class': 'IN',}
 
 class ResourceRecord(db.Model):
@@ -123,11 +123,19 @@ class ApiHandler(webapp.RequestHandler):
                     records = [records[0].zone.soa_record()]
                 else:
                     records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
+            elif type == 'AXFR':
+                if domain == records[0].zone.domain:
+                    records = records[0].zone.resourcerecord_set.fetch(1000)
+                    records.insert(0, records[0].zone.soa_record())
+                else:
+                    records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
             else:
-                records = records.filter('type =', type)
-                if type == 'A' and records.count() == 0:
-                    records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME')
-        if records.count() == 0:
+                records = records.filter('type =', type).fetch(1000)
+                if type == 'A' and len(records) == 0:
+                    records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME').fetch(1000)
+        else:
+            records = records.fetch(1000)
+        if len(records) == 0:
             self.response.set_status(404)
             self.response.out.write("404 NXDOMAIN")
         else:
