@@ -127,7 +127,11 @@ class ApiHandler(webapp.RequestHandler):
                 records = records.filter('type =', type)
                 if type == 'A' and records.count() == 0:
                     records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME')
-        self.response.out.write(simplejson.dumps(records, cls=BetterJSONEncoder))
+        if records.count() == 0:
+            self.response.set_status(404)
+            self.response.out.write("404 NXDOMAIN")
+        else:
+            self.response.out.write(simplejson.dumps(records, cls=BetterJSONEncoder))
 
 class RecordsHandler(webapp.RequestHandler):
     def get(self):
