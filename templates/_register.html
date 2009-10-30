@@ -1,0 +1,46 @@
+<form action="/register" method="post">
+  <input name="domain" type="text" id="domain" /> <input id="register" type="submit" disabled="disabled" value="Register">
+</form>
+<div id="available"></div>
+<script type="text/javascript">
+var connection = null;
+var last = null;
+$('#domain').keyup(function () {
+  if ($('#domain').val().match(/[\w\d-]+\.[\w\d-]{2,4}$/)) { 
+    $('#register').removeAttr('disabled');
+  } else {
+    $('#register').attr('disabled', 'disabled');
+  } 
+  setTimeout(function() {
+    if (last != $('#domain').val()) {
+      last = $('#domain').val();
+      if (connection) { connection.abort(); }
+      connection = $.ajax({
+        type:"GET", 
+        url: "/check?domain=" + $('#domain').val(), 
+        success: function(data){
+          $("#available").html(data);
+        }
+      });
+    }
+  }, 100);
+  
+});
+</script>
+<hr />
+
+<form method=post action="https://payments-sandbox.amazon.com/checkout/A3BR9YH4PYVRON">
+
+<input name="item_merchant_id_1" value="A3BR9YH4PYVRON" type=hidden />
+<input name="item_title_1" value="Domain" type=hidden />
+<input name="item_price_1" value="15.00" type=hidden />
+<input name="item_quantity_1" value="1" type=hidden />
+
+<input name="currency_code" value="USD" type=hidden />
+
+<!--input name="merchant_signature" value="r5obOc11ZFyJbhIp61M8SeRqYEk=" type=hidden /-->
+
+<input alt="Checkout with Amazon Payments" src="https://payments.amazon.com/gp/cba/button?ie=UTF8
+&color=orange&background=white&cartOwnerId=A3BR9YH4PYVRON&size=medium" type="image">
+
+</form>
