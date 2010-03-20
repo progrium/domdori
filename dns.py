@@ -54,7 +54,10 @@ class ResourceRecord(db.Model):
     
     @classmethod
     def get_all_by_name(cls, name):
-        return cls.all().filter('name =', name)
+        records = cls.all().filter('name =', name)
+        if records.count() == 0:
+            records = cls.all().filter('name =', '*.' + name.split('.', 1)[1])
+        return records
     
     def __str__(self):
         return ' '.join([self.name, self.type, self.data])
@@ -135,6 +138,9 @@ class ApiHandler(webapp.RequestHandler):
                     records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME').fetch(1000)
         else:
             records = records.fetch(1000)
+        for record in records:
+            if '*' in record.name:
+                record.name = domain
         if len(records) == 0:
             self.response.set_status(404)
             self.response.out.write("404 NXDOMAIN")
