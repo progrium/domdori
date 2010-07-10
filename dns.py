@@ -87,6 +87,57 @@ class ResourceRecord(db.Model):
             'ttl': self.ttl if self.ttl else self.zone.ttl,
             'class': 'IN',}
 
+class DNSMessage(object):
+    header      = {}
+    answer      = []
+    authority   = []
+    additional  = []
+    
+    @classmethod
+    def query(cls, name, type):
+        records = ResourceRecord.get_all_by_name(name)
+        count   = records.count()
+        if type == 'ANY':
+            records = records.fetch(1000)
+        else:
+            if type == 'SOA' and count:
+                if name == records[0].zone.domain:
+                    records = [records[0].zone.soa_record()]
+                else:
+                    records = [{'name': name, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
+            elif type == 'AXFR' and count:
+                if name == records[0].zone.domain:
+                    records = records[0].zone.resourcerecord_set.fetch(1000)
+                    records.insert(0, records[0].zone.soa_record())
+                else:
+                    records = [{'name': name, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
+            else:
+                records = records.filter('type =', type).fetch(1000)
+                if not len(records) and type == 'A':
+                    records = ResourceRecord.get_all_by_name(name).filter('type =', 'CNAME').fetch(1000)
+        # Resolve wildcards
+        for record in records:
+            if isinstance(record, dict):
+                if '*' in record['name']:
+                    record['name'] = name
+            else:
+                if '*' in record.name:
+                    record.name = name
+        message = cls()
+        message.answer = records
+        if count:
+            message.header['rcode'] = 'NOERROR'
+        else:
+            message.header['rcode'] = 'NXDOMAIN'
+        return message
+    
+    def __json__(self):
+        return dict(
+            answer      =self.answer,
+            authority   =self.authority,
+            additional  =self.additional,
+            header      =self.header,)
+
 class BetterJSONEncoder(simplejson.JSONEncoder):
     def default(self, o):
         if getattr(o, '__iter__', False):
@@ -115,37 +166,12 @@ class DomainHandler(webapp.RequestHandler):
             z.put()
         self.redirect('/dns')
 
-class ApiHandler(webapp.RequestHandler):
-    def get(self):
-        domain = self.request.path.split('/')[-1]
-        records = ResourceRecord.get_all_by_name(domain)
-        type = self.request.GET.get('type', None)
-        if type and not type == 'ANY':
-            if type == 'SOA':
-                if domain == records[0].zone.domain:
-                    records = [records[0].zone.soa_record()]
-                else:
-                    records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
-            elif type == 'AXFR':
-                if domain == records[0].zone.domain:
-                    records = records[0].zone.resourcerecord_set.fetch(1000)
-                    records.insert(0, records[0].zone.soa_record())
-                else:
-                    records = [{'name': domain, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
-            else:
-                records = records.filter('type =', type).fetch(1000)
-                if type == 'A' and len(records) == 0:
-                    records = ResourceRecord.get_all_by_name(domain).filter('type =', 'CNAME').fetch(1000)
-        else:
-            records = records.fetch(1000)
-        for record in records:
-            if '*' in record.name:
-                record.name = domain
-        if len(records) == 0:
+class WebDNSHandler(webapp.RequestHandler):
+    def get(self, name, type='ANY'):
+        message = DNSMessage.query(name, type)
+        if not message.answer:
             self.response.set_status(404)
-            self.response.out.write("404 NXDOMAIN")
-        else:
-            self.response.out.write(simplejson.dumps(records, cls=BetterJSONEncoder))
+        self.response.out.write(simplejson.dumps(message, cls=BetterJSONEncoder))
 
 class RecordsHandler(webapp.RequestHandler):
     def get(self):
@@ -191,7 +217,7 @@ class RecordsHandler(webapp.RequestHandler):
 def main():
     application = webapp.WSGIApplication([
         ('/dns', DomainHandler), 
-        ('/dns/records.*', ApiHandler),
+        ('/dns/IN/(.+)/(.*)', WebDNSHandler),
         ('/dns.*', RecordsHandler),
     ], debug=True)
     wsgiref.handlers.CGIHandler().run(application)
