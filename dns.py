@@ -2,6 +2,9 @@ from google.appengine.ext import db
 from django.utils import simplejson
 import time
 
+def sld(domain):
+    return '.'.join(domain.split('.')[-2:])
+
 class Zone(db.Model):
     user    = db.UserProperty(auto_current_user_add=True)
     domain  = db.StringProperty(required=True)
@@ -14,6 +17,11 @@ class Zone(db.Model):
         return cls.all().filter('domain =', domain).get()
     
     @classmethod
+    def exists(cls, domain):
+        return cls.all().filter('domain =', domain).get() or \
+            cls.all().filter('domain =', sld(domain)).get()
+    
+    @classmethod
     def get_all_by_user(cls, user):
         return cls.all().filter('user =', user)
     
@@ -22,6 +30,9 @@ class Zone(db.Model):
     
     def serial(self):
         return int(time.mktime(self.updated.timetuple()))
+    
+    def soa_cname(self, name):
+        return {'name': name, 'type': 'CNAME', 'rdata': self.domain, 'ttl': 1, 'class': 'IN',}
     
     def soa_record(self):
         return {
@@ -88,47 +99,69 @@ class ResourceRecord(db.Model):
             'class': 'IN',}
 
 class DNSMessage(object):
-    header      = {}
-    answer      = []
-    authority   = []
-    additional  = []
+    
+    def __init__(self):
+        self.header     = {}
+        self.answer     = []
+        self.authority  = []
+        self.additional = []
     
     @classmethod
     def query(cls, name, type):
         records = ResourceRecord.get_all_by_name(name)
-        count   = records.count()
-        if type == 'ANY':
-            records = records.fetch(1000)
+        if records.count() > 0:
+            zone = records[0].zone
         else:
-            if type == 'SOA' and count:
-                if name == records[0].zone.domain:
-                    records = [records[0].zone.soa_record()]
+            zone = None
+        if type == 'ANY':
+            query = records.fetch(1000)
+        else:
+            if type == 'SOA' and zone:
+                if name == zone.domain:
+                    query = [zone.soa_record()]
                 else:
-                    records = [{'name': name, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
-            elif type == 'AXFR' and count:
-                if name == records[0].zone.domain:
-                    records = records[0].zone.resourcerecord_set.fetch(1000)
-                    records.insert(0, records[0].zone.soa_record())
+                    query = [zone.soa_cname(name)]
+            elif type == 'AXFR' and zone:
+                if name == zone.domain:
+                    query = zone.resourcerecord_set.fetch(1000)
+                    query.insert(0, zone.soa_record())
                 else:
-                    records = [{'name': name, 'type': 'CNAME', 'rdata': records[0].zone.domain, 'ttl': 1, 'class': 'IN',}]
+                    query = [zone.soa_cname(name)]
             else:
-                records = records.filter('type =', type).fetch(1000)
-                if not len(records) and type == 'A':
-                    records = ResourceRecord.get_all_by_name(name).filter('type =', 'CNAME').fetch(1000)
+                query = records.filter('type =', type).fetch(1000)
+                if not len(query) and type == 'A':
+                    query = ResourceRecord.get_all_by_name(name).filter('type =', 'CNAME').fetch(1000)
         # Resolve wildcards
-        for record in records:
+        for record in query:
             if isinstance(record, dict):
                 if '*' in record['name']:
                     record['name'] = name
             else:
                 if '*' in record.name:
                     record.name = name
+        return cls.create(name, query, zone)
+    
+    @classmethod
+    def create(cls, name, query, zone=None):
         message = cls()
-        message.answer = records
-        if count:
-            message.header['rcode'] = 'NOERROR'
+        message.answer = query
+        if len(query):
+            # Query succeeds
+            message.header['rcode'] = 'NOERROR'   
         else:
-            message.header['rcode'] = 'NXDOMAIN'
+            if zone:
+                # Domain exists, query fails (none of this type)
+                message.header['rcode'] = 'NOERROR'   
+                message.authority.append(zone.soa_record())
+            else:
+                exists = Zone.exists(name)
+                if not exists:
+                    # Domain is not hosted here
+                    message.header['rcode'] = 'REFUSED'
+                else:
+                    # Query failed, domain not found, but likely hosted here
+                    message.header['rcode'] = 'NXDOMAIN'
+                    message.authority.append(exists.soa_record())
         return message
     
     def __json__(self):
