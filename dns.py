@@ -5,6 +5,12 @@ import time
 def sld(domain):
     return '.'.join(domain.split('.')[-2:])
 
+rcode_status = {
+    'NOERROR':  200,
+    'NXDOMAIN': 404,
+    'REFUSED':  403,
+}
+
 class Zone(db.Model):
     user    = db.UserProperty(auto_current_user_add=True)
     domain  = db.StringProperty(required=True)
@@ -147,11 +153,11 @@ class DNSMessage(object):
         message.answer = query
         if len(query):
             # Query succeeds
-            message.header['rcode'] = 'NOERROR'   
+            message.header['rcode'] = 'NOERROR'
         else:
             if zone:
                 # Domain exists, query fails (none of this type)
-                message.header['rcode'] = 'NOERROR'   
+                message.header['rcode'] = 'NOERROR'
                 message.authority.append(zone.soa_record())
             else:
                 exists = Zone.exists(name)
@@ -202,8 +208,7 @@ class DomainHandler(webapp.RequestHandler):
 class WebDNSHandler(webapp.RequestHandler):
     def get(self, name, type='ANY'):
         message = DNSMessage.query(name, type)
-        if not message.answer:
-            self.response.set_status(404)
+        self.response.set_status(rcode_status.get(message.header['rcode'], 200))
         self.response.out.write(simplejson.dumps(message, cls=BetterJSONEncoder))
 
 class RecordsHandler(webapp.RequestHandler):
