@@ -8,11 +8,18 @@ from google.appengine.ext import db
 
 import urllib
 
-# These only work if your IP is allowed
-import keys
-ENOM_UID = keys.enom_uid
-ENOM_PASS = keys.enom_pass
-ENOM_HOST = keys.enom_host
+# Connecting to ENOM only works if your IP is allowed
+try:
+    # keys.py isn't stored in source control, you'll need to make it yourself!
+    import keys
+    ENOM_UID  = keys.enom_uid
+    ENOM_PASS = keys.enom_pass
+    ENOM_HOST = keys.enom_host
+except ImportError:
+    ENOM_UID  = ''
+    ENOM_PASS = ''
+    ENOM_HOST = ''
+
 NS1 = 'ns1.domdori.com'
 NS2 = 'ns2.domdori.com'
 
