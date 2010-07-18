@@ -1,5 +1,3 @@
-domdori
-
-Web application to manage DNS, serves DNS via a WebDNS gateway.
+Web application to manage DNS records and serve them via a WebDNS gateway.
 
 Written in Python for Google App Engine.
