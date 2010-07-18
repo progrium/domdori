@@ -1,6 +1,5 @@
 from google.appengine.ext import db
 from django.utils import simplejson
-from google.appengine.api.urlfetch import fetch
 import time
 
 def sld(domain):
@@ -14,11 +13,11 @@ rcode_status = {
 
 class Delegate(db.Model):
     # Not sure why I need a user, but the cool kids were doing it so ...
-    user    = db.UserProperty(auto_current_user_add=True)
-    domain  = db.StringProperty(required=True)
-    url     = db.LinkProperty(required=True)
-    created = db.DateTimeProperty(auto_now_add=True)
-    updated = db.DateTimeProperty(auto_now=True)
+    user     = db.UserProperty(auto_current_user_add=True)
+    domain   = db.StringProperty(required=True)
+    base_url = db.LinkProperty(required=True)
+    created  = db.DateTimeProperty(auto_now_add=True)
+    updated  = db.DateTimeProperty(auto_now=True)
 
     # FIXME: This only works for domains and sub-domains but not for sub-sub-domains, etc
     @classmethod
@@ -29,11 +28,9 @@ class Delegate(db.Model):
         return rv
 
     @classmethod
-    def fetch(cls, name, type):
+    def redirect_url(cls, name, type):
         delegate = Delegate.get_by_domain(name)
-        base_url = delegate.url
-        url = '/'.join([base_url, 'IN', name, type])
-        return fetch(url).content
+        return '/'.join([delegate.base_url, 'IN', name, type])
         
 
 class Zone(db.Model):
@@ -233,10 +230,9 @@ class DomainHandler(webapp.RequestHandler):
 
 class WebDNSHandler(webapp.RequestHandler):
     def get(self, name, type='ANY'):
-        # FIXME: This will work for now, eventually this needs to moved into DNSMessage.query so it can be validated
         delegate = Delegate.get_by_domain(name)
         if delegate:
-            self.response.out.write(delegate.fetch(name, type))
+            self.redirect(delegate.redirect_url(name, type))
             return
 
         message = DNSMessage.query(name, type)
@@ -252,7 +248,7 @@ class RecordsHandler(webapp.RequestHandler):
         delegate = Delegate.get_by_domain(domain)
 
         if delegate:
-            url = delegate.url
+            url = delegate.base_url
         else:
             url = ''
 
@@ -294,23 +290,22 @@ class RecordsHandler(webapp.RequestHandler):
 
 class DelegateHandler(webapp.RequestHandler):
     def post(self):
-        user   = users.get_current_user()
-        domain = self.request.path.split('/')[-1]
-        url    = self.request.POST['url']
+        user     = users.get_current_user()
+        domain   = self.request.path.split('/')[-1]
+        base_url = self.request.POST['url']
 
-        # FIXME: Add URL validation here, potentially ping the URL for a valid WebDNS response?
-        if not user or not domain or not url:
+        if not user or not domain or not base_url:
             self.redirect('/')
 
         delegate = Delegate.get_by_domain(domain)
 
         if not delegate:
-            delegate = Delegate(domain=domain,url=url)
+            delegate = Delegate(domain=domain,base_url=base_url)
             delegate.put()
         elif self.request.POST['action'] == 'Remove':
             delegate.delete()
         else:
-            delegate.url = url
+            delegate.base_url = base_url
             delegate.put()
 
         self.redirect('/dns/%s' % domain)
