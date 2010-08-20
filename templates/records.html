@@ -1,6 +1,13 @@
 {% extends 'base.html' %}
 {% block content %}
 <h3>{{ zone.domain }}</h3>
+<form action="/dns/delegate/{{ zone.domain }}" method="post">
+  WebDNS delegate: <input type="text" name="url" value="{{url}}" />
+  <input type="submit" name="action" value="Update" />
+  {% if url %}
+  <input type="submit" name="action" value="Remove" />
+  {% endif %}
+</form>
 <ul>
   {% for record in records %}
   <li>{{ record }} <a href="/dns/{{ zone.domain }}?delete={{ record.key.id }}" style="font-size: smaller; ">Delete</a></li>

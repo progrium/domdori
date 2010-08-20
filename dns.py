@@ -11,6 +11,28 @@ rcode_status = {
     'REFUSED':  403,
 }
 
+class Delegate(db.Model):
+    # Not sure why I need a user, but the cool kids were doing it so ...
+    user     = db.UserProperty(auto_current_user_add=True)
+    domain   = db.StringProperty(required=True)
+    base_url = db.LinkProperty(required=True)
+    created  = db.DateTimeProperty(auto_now_add=True)
+    updated  = db.DateTimeProperty(auto_now=True)
+
+    # FIXME: This only works for domains and sub-domains but not for sub-sub-domains, etc
+    @classmethod
+    def get_by_domain(cls, domain):
+        rv = cls.all().filter('domain =', domain).get()
+        if not rv:
+            rv = cls.all().filter('domain =', domain.split('.', 1)[1]).get()
+        return rv
+
+    @classmethod
+    def redirect_url(cls, name, type):
+        delegate = Delegate.get_by_domain(name)
+        return '/'.join([delegate.base_url, 'IN', name, type])
+        
+
 class Zone(db.Model):
     user    = db.UserProperty(auto_current_user_add=True)
     domain  = db.StringProperty(required=True)
@@ -21,6 +43,11 @@ class Zone(db.Model):
     @classmethod
     def get_by_domain(cls, domain):
         return cls.all().filter('domain =', domain).get()
+
+    @classmethod
+    def exists(cls, domain):
+        return cls.all().filter('domain =', domain).get() or \
+            cls.all().filter('domain =', sld(domain)).get()
     
     @classmethod
     def exists(cls, domain):
@@ -198,6 +225,7 @@ class DomainHandler(webapp.RequestHandler):
         else:
             self.redirect('/')
     
+    # FIXME: This allows multiple domains with the same name to be created
     def post(self):
         domain = self.request.POST.get('domain', None)
         if domain:
@@ -207,6 +235,11 @@ class DomainHandler(webapp.RequestHandler):
 
 class WebDNSHandler(webapp.RequestHandler):
     def get(self, name, type='ANY'):
+        delegate = Delegate.get_by_domain(name)
+        if delegate:
+            self.redirect(delegate.redirect_url(name, type))
+            return
+            
         message = DNSMessage.query(name, type)
         self.response.set_status(rcode_status.get(message.header['rcode'], 200))
         self.response.out.write(simplejson.dumps(message, cls=BetterJSONEncoder))
@@ -216,6 +249,14 @@ class RecordsHandler(webapp.RequestHandler):
         domain = self.request.path.split('/')[-1]
         zone = Zone.get_by_domain(domain)
         user = users.get_current_user()
+
+        delegate = Delegate.get_by_domain(domain)
+
+        if delegate:
+            url = delegate.base_url
+        else:
+            url = ''
+
         if user and zone.user == user:
             if 'delete' in self.request.GET:
                 r = ResourceRecord.get_by_id(int(self.request.GET['delete']))
@@ -252,10 +293,33 @@ class RecordsHandler(webapp.RequestHandler):
         else:
             self.redirect('/')
 
+class DelegateHandler(webapp.RequestHandler):
+    def post(self):
+        user     = users.get_current_user()
+        domain   = self.request.path.split('/')[-1]
+        base_url = self.request.POST['url']
+
+        if not user or not domain or not base_url:
+            self.redirect('/')
+
+        delegate = Delegate.get_by_domain(domain)
+
+        if not delegate:
+            delegate = Delegate(domain=domain,base_url=base_url)
+            delegate.put()
+        elif self.request.POST['action'] == 'Remove':
+            delegate.delete()
+        else:
+            delegate.base_url = base_url
+            delegate.put()
+
+        self.redirect('/dns/%s' % domain)
+
 def main():
     application = webapp.WSGIApplication([
         ('/dns', DomainHandler), 
         ('/dns/IN/(.+)/(.*)', WebDNSHandler),
+        ('/dns/delegate.*', DelegateHandler),
         ('/dns.*', RecordsHandler),
     ], debug=True)
     wsgiref.handlers.CGIHandler().run(application)
